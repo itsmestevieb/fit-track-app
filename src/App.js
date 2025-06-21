@@ -6,15 +6,35 @@ import { getFirestore, collection, addDoc, query, onSnapshot, doc, setDoc, getDo
 import { Trash2, Plus, Dumbbell, Zap, Weight, Users, LogOut, UserPlus, BrainCircuit, X, Edit, ChevronsUp, ChevronsDown, ChevronRight } from 'lucide-react';
 
 // --- Firebase Configuration ---
-// First, try to get config from Vercel's environment variables for production.
-// Fallback to the global variables from the development environment.
-const firebaseConfig = (typeof process !== 'undefined' && process.env.REACT_APP_FIREBASE_CONFIG)
-    ? JSON.parse(process.env.REACT_APP_FIREBASE_CONFIG)
-    : (typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {});
+// For debugging in production, we'll add more detailed logs.
+console.log("Attempting to load Firebase config from environment...");
+const rawFirebaseConfig = (typeof process !== 'undefined') ? process.env.REACT_APP_FIREBASE_CONFIG : undefined;
+console.log("Raw REACT_APP_FIREBASE_CONFIG from environment:", rawFirebaseConfig);
+
+let firebaseConfig = {};
+try {
+    firebaseConfig = rawFirebaseConfig 
+        ? JSON.parse(rawFirebaseConfig) 
+        : (typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {});
+    
+    if (Object.keys(firebaseConfig).length === 0 && !rawFirebaseConfig && typeof __firebase_config === 'undefined') {
+        console.log("firebaseConfig is empty because no source was found (Vercel env or dev env).");
+    } else if (Object.keys(firebaseConfig).length > 0) {
+        console.log("Firebase config parsed successfully.");
+    } else {
+        console.log("firebaseConfig object is empty after attempting to parse.");
+    }
+} catch (e) {
+    console.error("CRITICAL: Failed to parse REACT_APP_FIREBASE_CONFIG. It is not valid JSON.", e);
+    console.error("The problematic string received was:", rawFirebaseConfig);
+    firebaseConfig = {}; // Ensure it's empty on error
+}
 
 const appId = (typeof process !== 'undefined' && process.env.REACT_APP_APP_ID) 
     ? process.env.REACT_APP_APP_ID 
     : (typeof __app_id !== 'undefined' ? __app_id : 'default-app-id');
+
+console.log("Final App ID being used:", appId);
 
 
 // --- Main App Component ---
@@ -67,6 +87,7 @@ export default function App() {
                 setIsAuthReady(true); // Let the app proceed to show an error state if needed
             }
         } else {
+            // This log is now a fallback; the more detailed logs are at the top level.
             console.error("Firebase config is missing. App cannot initialize.");
             setIsAuthReady(true); // Unblock the UI to show that something is wrong.
         }
