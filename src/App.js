@@ -5,26 +5,21 @@ import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken }
 import { getFirestore, collection, addDoc, query, onSnapshot, doc, setDoc, getDocs, where, orderBy, deleteDoc, updateDoc } from 'firebase/firestore';
 import { Trash2, Plus, Dumbbell, Zap, Weight, Users, LogOut, UserPlus, BrainCircuit, X, Edit, ChevronsUp, ChevronsDown, ChevronRight } from 'lucide-react';
 
+// --- Diagnostic Check ---
+// We are temporarily ignoring the complex Firebase config to test one simple variable.
+const diagnosticMessage = (typeof process !== 'undefined') ? process.env.REACT_APP_DIAGNOSTIC_MESSAGE : "Variable not found";
+console.log("Reading REACT_APP_DIAGNOSTIC_MESSAGE:", diagnosticMessage);
+
+
 // --- Firebase Configuration ---
-// ADDED FOR DEBUGGING: Log each environment variable individually to help diagnose Vercel issues.
-console.log("--- Vercel Environment Variable Debug ---");
-console.log("Reading REACT_APP_FIREBASE_API_KEY:", (typeof process !== 'undefined') ? process.env.REACT_APP_FIREBASE_API_KEY : 'N/A in this environment');
-console.log("Reading REACT_APP_FIREBASE_AUTH_DOMAIN:", (typeof process !== 'undefined') ? process.env.REACT_APP_FIREBASE_AUTH_DOMAIN : 'N/A in this environment');
-console.log("Reading REACT_APP_FIREBASE_PROJECT_ID:", (typeof process !== 'undefined') ? process.env.REACT_APP_FIREBASE_PROJECT_ID : 'N/A in this environment');
-console.log("Reading REACT_APP_FIREBASE_STORAGE_BUCKET:", (typeof process !== 'undefined') ? process.env.REACT_APP_FIREBASE_STORAGE_BUCKET : 'N/A in this environment');
-console.log("Reading REACT_APP_FIREBASE_MESSAGING_SENDER_ID:", (typeof process !== 'undefined') ? process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID : 'N/A in this environment');
-console.log("Reading REACT_APP_FIREBASE_APP_ID:", (typeof process !== 'undefined') ? process.env.REACT_APP_FIREBASE_APP_ID : 'N/A in this environment');
-console.log("-----------------------------------------");
-
-
-// Updated to use individual environment variables for Vercel, which is more reliable.
+// This will be re-enabled after the diagnostic test passes.
 const firebaseConfig = {
-  apiKey: (typeof process !== 'undefined') ? process.env.REACT_APP_FIREBASE_API_KEY : (typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config).apiKey : undefined),
-  authDomain: (typeof process !== 'undefined') ? process.env.REACT_APP_FIREBASE_AUTH_DOMAIN : (typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config).authDomain : undefined),
-  projectId: (typeof process !== 'undefined') ? process.env.REACT_APP_FIREBASE_PROJECT_ID : (typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config).projectId : undefined),
-  storageBucket: (typeof process !== 'undefined') ? process.env.REACT_APP_FIREBASE_STORAGE_BUCKET : (typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config).storageBucket : undefined),
-  messagingSenderId: (typeof process !== 'undefined') ? process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID : (typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config).messagingSenderId : undefined),
-  appId: (typeof process !== 'undefined') ? process.env.REACT_APP_FIREBASE_APP_ID : (typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config).appId : undefined),
+  apiKey: (typeof process !== 'undefined') ? process.env.REACT_APP_FIREBASE_API_KEY : undefined,
+  authDomain: (typeof process !== 'undefined') ? process.env.REACT_APP_FIREBASE_AUTH_DOMAIN : undefined,
+  projectId: (typeof process !== 'undefined') ? process.env.REACT_APP_FIREBASE_PROJECT_ID : undefined,
+  storageBucket: (typeof process !== 'undefined') ? process.env.REACT_APP_FIREBASE_STORAGE_BUCKET : undefined,
+  messagingSenderId: (typeof process !== 'undefined') ? process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID : undefined,
+  appId: (typeof process !== 'undefined') ? process.env.REACT_APP_FIREBASE_APP_ID : undefined,
 };
 
 const appId = firebaseConfig.appId || 'default-app-id';
@@ -50,41 +45,37 @@ export default function App() {
 
     // --- Firebase Initialization and Auth ---
     useEffect(() => {
-        // Ensure firebaseConfig has essential keys before initializing
-        if (firebaseConfig.apiKey && firebaseConfig.projectId) {
-            try {
-                const app = initializeApp(firebaseConfig);
-                const authInstance = getAuth(app);
-                setDb(getFirestore(app));
+        // We now check the diagnostic message first.
+        if (diagnosticMessage === "Hello from Vercel!") {
+             if (firebaseConfig.apiKey && firebaseConfig.projectId) {
+                try {
+                    const app = initializeApp(firebaseConfig);
+                    const authInstance = getAuth(app);
+                    setDb(getFirestore(app));
 
-                const unsubscribe = onAuthStateChanged(authInstance, async (user) => {
-                    if (user) {
-                        setAuthUid(user.uid);
-                    } else {
-                        try {
-                            // The custom token is for the dev environment. In production, we'll just sign in anonymously.
-                            if (typeof __initial_auth_token !== 'undefined') {
-                                await signInWithCustomToken(authInstance, __initial_auth_token);
-                            } else {
-                                await signInAnonymously(authInstance);
-                            }
-                        } catch (error) {
-                            console.error("Error signing in:", error);
+                    const unsubscribe = onAuthStateChanged(authInstance, async (user) => {
+                        if (user) {
+                            setAuthUid(user.uid);
+                        } else {
+                            await signInAnonymously(authInstance);
                         }
-                    }
+                        setIsAuthReady(true);
+                    });
+                    return () => unsubscribe();
+                } catch (error) {
+                    console.error("Firebase initialization error:", error);
                     setIsAuthReady(true);
-                });
-                return () => unsubscribe();
-            } catch (error) {
-                console.error("Firebase initialization error:", error);
-                setIsAuthReady(true); // Let the app proceed to show an error state if needed
+                }
+            } else {
+                // This state will be reached if the diagnostic passes but the firebase keys are still wrong
+                setIsAuthReady(false); 
             }
         } else {
-            console.error("Firebase config is missing or incomplete. App cannot initialize.");
-            setIsAuthReady(true); // Unblock the UI to show that something is wrong.
+             setIsAuthReady(false);
         }
     }, []);
 
+    // ... Rest of the component logic remains the same
     // --- Profile Fetching ---
     useEffect(() => {
         if (!isAuthReady || !db || !authUid) return;
@@ -204,12 +195,13 @@ export default function App() {
     };
 
     // --- Render Logic ---
-    if (!isAuthReady || (isAuthReady && !firebaseConfig.apiKey)) {
+    if (!isAuthReady) {
         return (
             <div className="flex flex-col items-center justify-center h-screen bg-gray-900 text-white text-center p-4">
                 <X className="w-16 h-16 text-red-500 mb-4" />
                 <h2 className="text-2xl font-bold mb-2">Configuration Error</h2>
-                <p className="max-w-md">The Firebase configuration is missing. If you are the developer, please add your Firebase credentials to the Vercel environment variables.</p>
+                <p className="max-w-md">The app is not receiving configuration variables from the Vercel environment.</p>
+                <p className="mt-2 text-sm text-gray-400">Diagnostic message: {diagnosticMessage}</p>
             </div>
         );
     }
