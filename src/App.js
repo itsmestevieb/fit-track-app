@@ -5,19 +5,13 @@ import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken }
 import { getFirestore, collection, addDoc, query, onSnapshot, doc, setDoc, getDocs, where, orderBy, deleteDoc, updateDoc } from 'firebase/firestore';
 import { Trash2, Plus, Dumbbell, Zap, Weight, Users, LogOut, UserPlus, BrainCircuit, X, Edit, ChevronsUp, ChevronsDown, ChevronRight } from 'lucide-react';
 
-// --- Firebase Configuration ---
-// When deployed on Firebase Hosting, Firebase provides its own config automatically.
-// We will fetch it from a reserved URL.
-let firebaseConfig = {};
-const appId = (typeof process !== 'undefined' && process.env.REACT_APP_FIREBASE_APP_ID)
-    ? process.env.REACT_APP_FIREBASE_APP_ID
-    : (typeof __app_id !== 'undefined' ? __app_id : 'default-app-id');
 
 // --- Main App Component ---
 export default function App() {
     // --- State Management ---
     const [db, setDb] = useState(null);
     const [authUid, setAuthUid] = useState(null);
+    const [appId, setAppId] = useState(null);
     const [isAuthReady, setIsAuthReady] = useState(false);
     const [configError, setConfigError] = useState(false);
     
@@ -34,69 +28,89 @@ export default function App() {
 
     // --- Firebase Initialization and Auth ---
     useEffect(() => {
-        const initializeFirebase = async () => {
+        const initializeForProduction = async () => {
+            let finalConfig;
             try {
-                // Fetch the config from the special URL provided by Firebase Hosting
+                // First, try the Firebase Hosting method. This will only succeed if deployed on Firebase Hosting.
                 const response = await fetch('/__/firebase/init.json');
-                firebaseConfig = await response.json();
+                if (response.ok) {
+                    finalConfig = await response.json();
+                    console.log("Using config from Firebase Hosting.");
+                } else {
+                    // If the file doesn't exist, this will error and we'll fall back.
+                    throw new Error("Not on Firebase Hosting.");
+                }
+            } catch (e) {
+                // If the fetch fails, it means we are on Vercel or another platform.
+                console.log("Could not fetch from /__/firebase/init.json. Falling back to Vercel environment variables.");
+                finalConfig = {
+                    apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
+                    authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
+                    projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
+                    storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
+                    messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
+                    appId: process.env.REACT_APP_FIREBASE_APP_ID,
+                };
+            }
 
-                if (firebaseConfig.apiKey && firebaseConfig.projectId) {
-                    const app = initializeApp(firebaseConfig);
+            // After determining the config, initialize Firebase.
+            if (finalConfig && finalConfig.apiKey && finalConfig.projectId) {
+                try {
+                    const app = initializeApp(finalConfig);
                     const authInstance = getAuth(app);
                     setDb(getFirestore(app));
-
+                    setAppId(finalConfig.appId); // Set the appId here
+                    
                     const unsubscribe = onAuthStateChanged(authInstance, async (user) => {
                         if (user) {
                             setAuthUid(user.uid);
                         } else {
-                            // In a production environment, we will always sign in anonymously.
                             await signInAnonymously(authInstance);
                         }
                         setIsAuthReady(true);
                     });
-                    return () => unsubscribe();
-                } else {
-                    throw new Error("Fetched Firebase config is invalid.");
+                     return () => unsubscribe();
+                } catch (initError) {
+                    console.error("Firebase Initialization Failed:", initError);
+                    setConfigError(true);
                 }
-            } catch (error) {
-                console.error("Failed to initialize Firebase:", error);
+            } else {
+                console.error("Final configuration is missing or invalid. App cannot start.");
                 setConfigError(true);
             }
         };
 
-        // For the development canvas, we use the old method
-        if (typeof __firebase_config !== 'undefined') {
-            try {
-                firebaseConfig = JSON.parse(__firebase_config);
-                const app = initializeApp(firebaseConfig);
+        // This handles the development canvas environment (highest priority)
+        if (typeof __firebase_config !== 'undefined' && typeof __initial_auth_token !== 'undefined') {
+             try {
+                const devConfig = JSON.parse(__firebase_config);
+                const app = initializeApp(devConfig);
                 const authInstance = getAuth(app);
                 setDb(getFirestore(app));
-                 const unsubscribe = onAuthStateChanged(authInstance, async (user) => {
+                setAppId(devConfig.appId);
+
+                const unsubscribe = onAuthStateChanged(authInstance, async (user) => {
                     if (user) {
                         setAuthUid(user.uid);
                     } else {
-                        if (typeof __initial_auth_token !== 'undefined') {
-                            await signInWithCustomToken(authInstance, __initial_auth_token);
-                        } else {
-                           await signInAnonymously(authInstance);
-                        }
+                        await signInWithCustomToken(authInstance, __initial_auth_token);
                     }
                     setIsAuthReady(true);
                 });
-                 return () => unsubscribe();
+                return () => unsubscribe();
             } catch (devError) {
-                 console.error("Dev Firebase initialization error:", devError);
-                 setConfigError(true);
+                console.error("Dev Canvas initialization failed:", devError);
+                setConfigError(true);
             }
         } else {
-            // For production (Vercel or Firebase Hosting), use the fetch method
-            initializeFirebase();
+            // This handles all production deployments (Vercel and Firebase Hosting)
+            initializeForProduction();
         }
     }, []);
 
     // --- Profile Fetching ---
     useEffect(() => {
-        if (!isAuthReady || !db || !authUid) return;
+        if (!isAuthReady || !db || !authUid || !appId) return;
         
         setLoadingProfiles(true);
         const profilesCollectionPath = `/artifacts/${appId}/users/${authUid}/profiles`;
@@ -115,15 +129,11 @@ export default function App() {
         });
 
         return () => unsubscribe();
-    }, [isAuthReady, db, authUid]);
+    }, [isAuthReady, db, authUid, appId]);
 
     // --- Data Fetching for Selected Profile ---
     useEffect(() => {
-        if (!selectedProfile) {
-            setWorkouts([]);
-            setWeightLog([]);
-            return;
-        };
+        if (!selectedProfile || !appId) return;
 
         setLoadingData(true);
         const basePath = `/artifacts/${appId}/users/${authUid}/profiles/${selectedProfile.id}`;
@@ -147,7 +157,7 @@ export default function App() {
             unsubscribeWorkouts();
             unsubscribeWeightLog();
         };
-    }, [selectedProfile, db, authUid]);
+    }, [selectedProfile, db, authUid, appId]);
 
     // --- Calculate Most Recent Weight ---
     useEffect(() => {
@@ -165,7 +175,7 @@ export default function App() {
 
     // --- Data Handlers ---
     const handleAddWorkout = async (workout) => {
-        if (!db || !authUid || !selectedProfile) return;
+        if (!db || !authUid || !selectedProfile || !appId) return;
         const path = `/artifacts/${appId}/users/${authUid}/profiles/${selectedProfile.id}/workouts`;
         const data = { ...workout };
         if (!data.currentWeight) delete data.currentWeight;
@@ -174,7 +184,7 @@ export default function App() {
     };
     
     const handleUpdateWorkout = async (workoutId, workoutData) => {
-        if (!db || !authUid || !selectedProfile) return;
+        if (!db || !authUid || !selectedProfile || !appId) return;
         const path = `/artifacts/${appId}/users/${authUid}/profiles/${selectedProfile.id}/workouts/${workoutId}`;
         const docRef = doc(db, path);
         await updateDoc(docRef, workoutData);
@@ -183,20 +193,20 @@ export default function App() {
     };
 
     const handleLogWeight = async (weightEntry) => {
-        if (!db || !authUid || !selectedProfile) return;
+        if (!db || !authUid || !selectedProfile || !appId) return;
         const path = `/artifacts/${appId}/users/${authUid}/profiles/${selectedProfile.id}/weightLog`;
         await addDoc(collection(db, path), weightEntry);
         setView('dashboard');
     };
 
     const handleDeleteWorkout = async (id) => {
-        if (!db || !authUid || !selectedProfile) return;
+        if (!db || !authUid || !selectedProfile || !appId) return;
         const path = `/artifacts/${appId}/users/${authUid}/profiles/${selectedProfile.id}/workouts/${id}`;
         await deleteDoc(doc(db, path));
     };
     
     const handleCreateProfile = async (name) => {
-        if (!db || !authUid) return;
+        if (!db || !authUid || !appId) return;
         const path = `/artifacts/${appId}/users/${authUid}/profiles`;
         const newProfileRef = await addDoc(collection(db, path), { name });
         setSelectedProfile({ id: newProfileRef.id, name });
@@ -218,7 +228,7 @@ export default function App() {
             <div className="flex flex-col items-center justify-center h-screen bg-gray-900 text-white text-center p-4">
                 <X className="w-16 h-16 text-red-500 mb-4" />
                 <h2 className="text-2xl font-bold mb-2">Configuration Error</h2>
-                <p className="max-w-md">Failed to fetch or initialize Firebase configuration. Please check the network connection and Firebase project setup.</p>
+                <p className="max-w-md">Failed to fetch or initialize Firebase configuration. Please check your Vercel Environment Variables or your Firebase project setup.</p>
             </div>
         );
     }
@@ -703,4 +713,3 @@ const LogWeightForm = ({ onLogWeight, onCancel }) => {
         </form>
     );
 };
-
