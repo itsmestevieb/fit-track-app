@@ -6,6 +6,17 @@ import { getFirestore, collection, addDoc, query, onSnapshot, doc, setDoc, getDo
 import { Trash2, Plus, Dumbbell, Zap, Weight, Users, LogOut, UserPlus, BrainCircuit, X, Edit, ChevronsUp, ChevronsDown, ChevronRight } from 'lucide-react';
 
 // --- Firebase Configuration ---
+// ADDED FOR DEBUGGING: Log each environment variable individually to help diagnose Vercel issues.
+console.log("--- Vercel Environment Variable Debug ---");
+console.log("Reading REACT_APP_FIREBASE_API_KEY:", (typeof process !== 'undefined') ? process.env.REACT_APP_FIREBASE_API_KEY : 'N/A in this environment');
+console.log("Reading REACT_APP_FIREBASE_AUTH_DOMAIN:", (typeof process !== 'undefined') ? process.env.REACT_APP_FIREBASE_AUTH_DOMAIN : 'N/A in this environment');
+console.log("Reading REACT_APP_FIREBASE_PROJECT_ID:", (typeof process !== 'undefined') ? process.env.REACT_APP_FIREBASE_PROJECT_ID : 'N/A in this environment');
+console.log("Reading REACT_APP_FIREBASE_STORAGE_BUCKET:", (typeof process !== 'undefined') ? process.env.REACT_APP_FIREBASE_STORAGE_BUCKET : 'N/A in this environment');
+console.log("Reading REACT_APP_FIREBASE_MESSAGING_SENDER_ID:", (typeof process !== 'undefined') ? process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID : 'N/A in this environment');
+console.log("Reading REACT_APP_FIREBASE_APP_ID:", (typeof process !== 'undefined') ? process.env.REACT_APP_FIREBASE_APP_ID : 'N/A in this environment');
+console.log("-----------------------------------------");
+
+
 // Updated to use individual environment variables for Vercel, which is more reliable.
 const firebaseConfig = {
   apiKey: (typeof process !== 'undefined') ? process.env.REACT_APP_FIREBASE_API_KEY : (typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config).apiKey : undefined),
