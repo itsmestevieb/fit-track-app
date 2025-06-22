@@ -6,35 +6,17 @@ import { getFirestore, collection, addDoc, query, onSnapshot, doc, setDoc, getDo
 import { Trash2, Plus, Dumbbell, Zap, Weight, Users, LogOut, UserPlus, BrainCircuit, X, Edit, ChevronsUp, ChevronsDown, ChevronRight } from 'lucide-react';
 
 // --- Firebase Configuration ---
-// For debugging in production, we'll add more detailed logs.
-console.log("Attempting to load Firebase config from environment...");
-const rawFirebaseConfig = (typeof process !== 'undefined') ? process.env.REACT_APP_FIREBASE_CONFIG : undefined;
-console.log("Raw REACT_APP_FIREBASE_CONFIG from environment:", rawFirebaseConfig);
+// Updated to use individual environment variables for Vercel, which is more reliable.
+const firebaseConfig = {
+  apiKey: (typeof process !== 'undefined') ? process.env.REACT_APP_FIREBASE_API_KEY : (typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config).apiKey : undefined),
+  authDomain: (typeof process !== 'undefined') ? process.env.REACT_APP_FIREBASE_AUTH_DOMAIN : (typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config).authDomain : undefined),
+  projectId: (typeof process !== 'undefined') ? process.env.REACT_APP_FIREBASE_PROJECT_ID : (typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config).projectId : undefined),
+  storageBucket: (typeof process !== 'undefined') ? process.env.REACT_APP_FIREBASE_STORAGE_BUCKET : (typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config).storageBucket : undefined),
+  messagingSenderId: (typeof process !== 'undefined') ? process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID : (typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config).messagingSenderId : undefined),
+  appId: (typeof process !== 'undefined') ? process.env.REACT_APP_FIREBASE_APP_ID : (typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config).appId : undefined),
+};
 
-let firebaseConfig = {};
-try {
-    firebaseConfig = rawFirebaseConfig 
-        ? JSON.parse(rawFirebaseConfig) 
-        : (typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {});
-    
-    if (Object.keys(firebaseConfig).length === 0 && !rawFirebaseConfig && typeof __firebase_config === 'undefined') {
-        console.log("firebaseConfig is empty because no source was found (Vercel env or dev env).");
-    } else if (Object.keys(firebaseConfig).length > 0) {
-        console.log("Firebase config parsed successfully.");
-    } else {
-        console.log("firebaseConfig object is empty after attempting to parse.");
-    }
-} catch (e) {
-    console.error("CRITICAL: Failed to parse REACT_APP_FIREBASE_CONFIG. It is not valid JSON.", e);
-    console.error("The problematic string received was:", rawFirebaseConfig);
-    firebaseConfig = {}; // Ensure it's empty on error
-}
-
-const appId = (typeof process !== 'undefined' && process.env.REACT_APP_APP_ID) 
-    ? process.env.REACT_APP_APP_ID 
-    : (typeof __app_id !== 'undefined' ? __app_id : 'default-app-id');
-
-console.log("Final App ID being used:", appId);
+const appId = firebaseConfig.appId || 'default-app-id';
 
 
 // --- Main App Component ---
@@ -57,8 +39,8 @@ export default function App() {
 
     // --- Firebase Initialization and Auth ---
     useEffect(() => {
-        // Ensure firebaseConfig has keys before initializing
-        if (Object.keys(firebaseConfig).length > 0) {
+        // Ensure firebaseConfig has essential keys before initializing
+        if (firebaseConfig.apiKey && firebaseConfig.projectId) {
             try {
                 const app = initializeApp(firebaseConfig);
                 const authInstance = getAuth(app);
@@ -87,8 +69,7 @@ export default function App() {
                 setIsAuthReady(true); // Let the app proceed to show an error state if needed
             }
         } else {
-            // This log is now a fallback; the more detailed logs are at the top level.
-            console.error("Firebase config is missing. App cannot initialize.");
+            console.error("Firebase config is missing or incomplete. App cannot initialize.");
             setIsAuthReady(true); // Unblock the UI to show that something is wrong.
         }
     }, []);
@@ -212,7 +193,7 @@ export default function App() {
     };
 
     // --- Render Logic ---
-    if (!isAuthReady || (isAuthReady && Object.keys(firebaseConfig).length === 0)) {
+    if (!isAuthReady || (isAuthReady && !firebaseConfig.apiKey)) {
         return (
             <div className="flex flex-col items-center justify-center h-screen bg-gray-900 text-white text-center p-4">
                 <X className="w-16 h-16 text-red-500 mb-4" />
