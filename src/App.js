@@ -323,12 +323,25 @@ const callGeminiAPI = async (prompt) => {
             }
         }
     };
+
+    console.log("Calling Gemini API with payload:", JSON.stringify(payload, null, 2));
     const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-    if (!response.ok) throw new Error(`API call failed with status: ${response.status}`);
+    
+    if (!response.ok) {
+        const errorText = await response.text();
+        console.error("Gemini API Error Response:", errorText);
+        throw new Error(`API call failed with status: ${response.status}. Response: ${errorText}`);
+    }
+
     const result = await response.json();
+    console.log("Gemini API Success Response:", result);
+    
     if (result.candidates && result.candidates[0].content && result.candidates[0].content.parts[0]) {
         return JSON.parse(result.candidates[0].content.parts[0].text);
-    } else { throw new Error("Invalid response structure from API."); }
+    } else { 
+        console.error("Invalid response structure from API:", result);
+        throw new Error("Invalid response structure from API."); 
+    }
 };
 
 // --- Generate Plan & Modal Components ---
@@ -348,8 +361,8 @@ const GeneratePlanView = ({ onCancel }) => {
             const result = await callGeminiAPI(prompt);
             setPlan(result.weeklyPlan);
         } catch (err) {
-            console.error("Gemini API error:", err);
-            setError("Sorry, I couldn't generate a plan right now. Please try again later.");
+            console.error("Full error object from callGeminiAPI:", err);
+            setError(`Failed to generate a plan. The AI model may be temporarily unavailable or there was a network issue. Please try again. Details: ${err.message}`);
         } finally {
             setLoading(false);
         }
@@ -368,7 +381,7 @@ const GeneratePlanView = ({ onCancel }) => {
                     <button type="submit" disabled={loading} className="bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-2 px-4 rounded-lg disabled:bg-gray-500 disabled:cursor-not-allowed flex items-center">{loading ? <Dumbbell className="w-5 h-5 animate-spin mr-2" /> : '✨ Generate Plan'}</button>
                 </div>
             </form>
-            {error && (<Modal title="Error" onClose={() => setError(null)}><p className="text-red-400">{error}</p></Modal>)}
+            {error && (<Modal title="Error Generating Plan" onClose={() => setError(null)}><p className="text-red-400 whitespace-pre-wrap">{error}</p></Modal>)}
             {plan && (<Modal title={`Your Plan for "${goal}"`} onClose={() => setPlan(null)}><WorkoutPlanDisplay plan={plan} /></Modal>)}
         </div>
     );
@@ -616,3 +629,4 @@ const LogWeightForm = ({ onLogWeight, onCancel }) => {
         </form>
     );
 };
+
