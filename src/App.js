@@ -6,18 +6,12 @@ import { getFirestore, collection, addDoc, query, onSnapshot, doc, setDoc, getDo
 import { Trash2, Plus, Dumbbell, Zap, Weight, Users, LogOut, UserPlus, BrainCircuit, X, Edit, ChevronsUp, ChevronsDown, ChevronRight } from 'lucide-react';
 
 // --- Firebase Configuration ---
-// This version uses individual environment variables, which is the most reliable method for Vercel.
-const firebaseConfig = {
-  apiKey: (typeof process !== 'undefined') ? process.env.REACT_APP_FIREBASE_API_KEY : (typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config).apiKey : undefined),
-  authDomain: (typeof process !== 'undefined') ? process.env.REACT_APP_FIREBASE_AUTH_DOMAIN : (typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config).authDomain : undefined),
-  projectId: (typeof process !== 'undefined') ? process.env.REACT_APP_FIREBASE_PROJECT_ID : (typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config).projectId : undefined),
-  storageBucket: (typeof process !== 'undefined') ? process.env.REACT_APP_FIREBASE_STORAGE_BUCKET : (typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config).storageBucket : undefined),
-  messagingSenderId: (typeof process !== 'undefined') ? process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID : (typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config).messagingSenderId : undefined),
-  appId: (typeof process !== 'undefined') ? process.env.REACT_APP_FIREBASE_APP_ID : (typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config).appId : undefined),
-};
-
-const appId = firebaseConfig.appId || 'default-app-id';
-
+// When deployed on Firebase Hosting, Firebase provides its own config automatically.
+// We will fetch it from a reserved URL.
+let firebaseConfig = {};
+const appId = (typeof process !== 'undefined' && process.env.REACT_APP_FIREBASE_APP_ID)
+    ? process.env.REACT_APP_FIREBASE_APP_ID
+    : (typeof __app_id !== 'undefined' ? __app_id : 'default-app-id');
 
 // --- Main App Component ---
 export default function App() {
@@ -25,6 +19,7 @@ export default function App() {
     const [db, setDb] = useState(null);
     const [authUid, setAuthUid] = useState(null);
     const [isAuthReady, setIsAuthReady] = useState(false);
+    const [configError, setConfigError] = useState(false);
     
     const [profiles, setProfiles] = useState([]);
     const [selectedProfile, setSelectedProfile] = useState(null);
@@ -39,35 +34,63 @@ export default function App() {
 
     // --- Firebase Initialization and Auth ---
     useEffect(() => {
-        // Ensure firebaseConfig has essential keys before initializing
-        if (firebaseConfig.apiKey && firebaseConfig.projectId) {
+        const initializeFirebase = async () => {
             try {
+                // Fetch the config from the special URL provided by Firebase Hosting
+                const response = await fetch('/__/firebase/init.json');
+                firebaseConfig = await response.json();
+
+                if (firebaseConfig.apiKey && firebaseConfig.projectId) {
+                    const app = initializeApp(firebaseConfig);
+                    const authInstance = getAuth(app);
+                    setDb(getFirestore(app));
+
+                    const unsubscribe = onAuthStateChanged(authInstance, async (user) => {
+                        if (user) {
+                            setAuthUid(user.uid);
+                        } else {
+                            // In a production environment, we will always sign in anonymously.
+                            await signInAnonymously(authInstance);
+                        }
+                        setIsAuthReady(true);
+                    });
+                    return () => unsubscribe();
+                } else {
+                    throw new Error("Fetched Firebase config is invalid.");
+                }
+            } catch (error) {
+                console.error("Failed to initialize Firebase:", error);
+                setConfigError(true);
+            }
+        };
+
+        // For the development canvas, we use the old method
+        if (typeof __firebase_config !== 'undefined') {
+            try {
+                firebaseConfig = JSON.parse(__firebase_config);
                 const app = initializeApp(firebaseConfig);
                 const authInstance = getAuth(app);
                 setDb(getFirestore(app));
-
-                const unsubscribe = onAuthStateChanged(authInstance, async (user) => {
+                 const unsubscribe = onAuthStateChanged(authInstance, async (user) => {
                     if (user) {
                         setAuthUid(user.uid);
                     } else {
-                        // In a production Vercel environment, we will always sign in anonymously.
-                        // The __initial_auth_token is only for the development canvas.
                         if (typeof __initial_auth_token !== 'undefined') {
                             await signInWithCustomToken(authInstance, __initial_auth_token);
                         } else {
-                            await signInAnonymously(authInstance);
+                           await signInAnonymously(authInstance);
                         }
                     }
                     setIsAuthReady(true);
                 });
-                return () => unsubscribe();
-            } catch (error) {
-                console.error("Firebase initialization error:", error);
-                setIsAuthReady(true); 
+                 return () => unsubscribe();
+            } catch (devError) {
+                 console.error("Dev Firebase initialization error:", devError);
+                 setConfigError(true);
             }
         } else {
-            console.error("Firebase config is missing or incomplete. App cannot initialize.");
-            setIsAuthReady(false); // Keep the app in a "not ready" state to show the error screen.
+            // For production (Vercel or Firebase Hosting), use the fetch method
+            initializeFirebase();
         }
     }, []);
 
@@ -190,16 +213,20 @@ export default function App() {
     };
 
     // --- Render Logic ---
-    if (!isAuthReady) {
+    if (configError) {
         return (
             <div className="flex flex-col items-center justify-center h-screen bg-gray-900 text-white text-center p-4">
                 <X className="w-16 h-16 text-red-500 mb-4" />
                 <h2 className="text-2xl font-bold mb-2">Configuration Error</h2>
-                <p className="max-w-md">The app is not receiving configuration variables from the Vercel environment. Please check your project settings.</p>
+                <p className="max-w-md">Failed to fetch or initialize Firebase configuration. Please check the network connection and Firebase project setup.</p>
             </div>
         );
     }
     
+    if (!isAuthReady) {
+        return <div className="flex items-center justify-center h-screen bg-gray-900 text-white"><Dumbbell className="w-16 h-16 animate-spin mx-auto text-cyan-400" /><p className="mt-4 text-lg">Connecting to Firebase...</p></div>;
+    }
+
     if (loadingProfiles) {
         return <div className="flex items-center justify-center h-screen bg-gray-900 text-white"><Users className="w-16 h-16 animate-pulse mx-auto text-cyan-400" /><p className="mt-4 text-lg">Loading Profiles...</p></div>;
     }
@@ -676,3 +703,4 @@ const LogWeightForm = ({ onLogWeight, onCancel }) => {
         </form>
     );
 };
+
