@@ -5,21 +5,15 @@ import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken }
 import { getFirestore, collection, addDoc, query, onSnapshot, doc, setDoc, getDocs, where, orderBy, deleteDoc, updateDoc } from 'firebase/firestore';
 import { Trash2, Plus, Dumbbell, Zap, Weight, Users, LogOut, UserPlus, BrainCircuit, X, Edit, ChevronsUp, ChevronsDown, ChevronRight } from 'lucide-react';
 
-// --- Diagnostic Check ---
-// We are temporarily ignoring the complex Firebase config to test one simple variable.
-const diagnosticMessage = (typeof process !== 'undefined') ? process.env.REACT_APP_DIAGNOSTIC_MESSAGE : "Variable not found";
-console.log("Reading REACT_APP_DIAGNOSTIC_MESSAGE:", diagnosticMessage);
-
-
 // --- Firebase Configuration ---
-// This will be re-enabled after the diagnostic test passes.
+// This version uses individual environment variables, which is the most reliable method for Vercel.
 const firebaseConfig = {
-  apiKey: (typeof process !== 'undefined') ? process.env.REACT_APP_FIREBASE_API_KEY : undefined,
-  authDomain: (typeof process !== 'undefined') ? process.env.REACT_APP_FIREBASE_AUTH_DOMAIN : undefined,
-  projectId: (typeof process !== 'undefined') ? process.env.REACT_APP_FIREBASE_PROJECT_ID : undefined,
-  storageBucket: (typeof process !== 'undefined') ? process.env.REACT_APP_FIREBASE_STORAGE_BUCKET : undefined,
-  messagingSenderId: (typeof process !== 'undefined') ? process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID : undefined,
-  appId: (typeof process !== 'undefined') ? process.env.REACT_APP_FIREBASE_APP_ID : undefined,
+  apiKey: (typeof process !== 'undefined') ? process.env.REACT_APP_FIREBASE_API_KEY : (typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config).apiKey : undefined),
+  authDomain: (typeof process !== 'undefined') ? process.env.REACT_APP_FIREBASE_AUTH_DOMAIN : (typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config).authDomain : undefined),
+  projectId: (typeof process !== 'undefined') ? process.env.REACT_APP_FIREBASE_PROJECT_ID : (typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config).projectId : undefined),
+  storageBucket: (typeof process !== 'undefined') ? process.env.REACT_APP_FIREBASE_STORAGE_BUCKET : (typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config).storageBucket : undefined),
+  messagingSenderId: (typeof process !== 'undefined') ? process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID : (typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config).messagingSenderId : undefined),
+  appId: (typeof process !== 'undefined') ? process.env.REACT_APP_FIREBASE_APP_ID : (typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config).appId : undefined),
 };
 
 const appId = firebaseConfig.appId || 'default-app-id';
@@ -45,37 +39,38 @@ export default function App() {
 
     // --- Firebase Initialization and Auth ---
     useEffect(() => {
-        // We now check the diagnostic message first.
-        if (diagnosticMessage === "Hello from Vercel!") {
-             if (firebaseConfig.apiKey && firebaseConfig.projectId) {
-                try {
-                    const app = initializeApp(firebaseConfig);
-                    const authInstance = getAuth(app);
-                    setDb(getFirestore(app));
+        // Ensure firebaseConfig has essential keys before initializing
+        if (firebaseConfig.apiKey && firebaseConfig.projectId) {
+            try {
+                const app = initializeApp(firebaseConfig);
+                const authInstance = getAuth(app);
+                setDb(getFirestore(app));
 
-                    const unsubscribe = onAuthStateChanged(authInstance, async (user) => {
-                        if (user) {
-                            setAuthUid(user.uid);
+                const unsubscribe = onAuthStateChanged(authInstance, async (user) => {
+                    if (user) {
+                        setAuthUid(user.uid);
+                    } else {
+                        // In a production Vercel environment, we will always sign in anonymously.
+                        // The __initial_auth_token is only for the development canvas.
+                        if (typeof __initial_auth_token !== 'undefined') {
+                            await signInWithCustomToken(authInstance, __initial_auth_token);
                         } else {
                             await signInAnonymously(authInstance);
                         }
-                        setIsAuthReady(true);
-                    });
-                    return () => unsubscribe();
-                } catch (error) {
-                    console.error("Firebase initialization error:", error);
+                    }
                     setIsAuthReady(true);
-                }
-            } else {
-                // This state will be reached if the diagnostic passes but the firebase keys are still wrong
-                setIsAuthReady(false); 
+                });
+                return () => unsubscribe();
+            } catch (error) {
+                console.error("Firebase initialization error:", error);
+                setIsAuthReady(true); 
             }
         } else {
-             setIsAuthReady(false);
+            console.error("Firebase config is missing or incomplete. App cannot initialize.");
+            setIsAuthReady(false); // Keep the app in a "not ready" state to show the error screen.
         }
     }, []);
 
-    // ... Rest of the component logic remains the same
     // --- Profile Fetching ---
     useEffect(() => {
         if (!isAuthReady || !db || !authUid) return;
@@ -200,8 +195,7 @@ export default function App() {
             <div className="flex flex-col items-center justify-center h-screen bg-gray-900 text-white text-center p-4">
                 <X className="w-16 h-16 text-red-500 mb-4" />
                 <h2 className="text-2xl font-bold mb-2">Configuration Error</h2>
-                <p className="max-w-md">The app is not receiving configuration variables from the Vercel environment.</p>
-                <p className="mt-2 text-sm text-gray-400">Diagnostic message: {diagnosticMessage}</p>
+                <p className="max-w-md">The app is not receiving configuration variables from the Vercel environment. Please check your project settings.</p>
             </div>
         );
     }
