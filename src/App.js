@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, onAuthStateChanged, signInWithCustomToken, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
 import { getFirestore, collection, addDoc, query, onSnapshot, doc, deleteDoc, updateDoc } from 'firebase/firestore';
-import { Trash2, Plus, Dumbbell, Zap, Weight, LogOut, BrainCircuit, X, Edit, ChevronRight } from 'lucide-react';
+import { Trash2, Plus, Dumbbell, Zap, Weight, LogOut, BrainCircuit, X, Edit, ChevronRight, ChevronDown } from 'lucide-react';
 
 // --- Main App Component ---
 export default function App() {
@@ -239,7 +239,7 @@ export default function App() {
             case 'addWorkout': return <WorkoutForm onSave={handleAddWorkout} onCancel={() => setView('dashboard')} />;
             case 'editWorkout': return <WorkoutForm onSave={(data) => handleUpdateWorkout(editingWorkout.id, data)} onCancel={() => { setView('dashboard'); setEditingWorkout(null); }} existingWorkout={editingWorkout} />;
             case 'logWeight': return <LogWeightForm onLogWeight={handleLogWeight} onCancel={() => setView('dashboard')} />;
-            case 'generatePlan': return <GeneratePlanView onCancel={() => setView('dashboard')} />;
+            // case 'generatePlan': return <GeneratePlanView onCancel={() => setView('dashboard')} />; // Commented out
             default: return <Dashboard workouts={groupedWorkouts} totalWorkoutsCount={workouts.length} currentWeight={currentWeight} setView={setView} onDeleteWorkout={handleDeleteWorkout} onEditWorkout={startEditWorkout} />;
         }
     };
@@ -282,6 +282,7 @@ const LoginScreen = ({ onSignIn }) => {
     );
 };
 
+/* --- COMMENTED OUT: Generate Plan Feature ---
 
 // --- Gemini API Call Helper ---
 const callGeminiAPI = async (prompt) => {
@@ -323,19 +324,13 @@ const callGeminiAPI = async (prompt) => {
             }
         }
     };
-
-    console.log("Calling Gemini API with payload:", JSON.stringify(payload, null, 2));
     const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-    
     if (!response.ok) {
         const errorText = await response.text();
         console.error("Gemini API Error Response:", errorText);
         throw new Error(`API call failed with status: ${response.status}. Response: ${errorText}`);
     }
-
     const result = await response.json();
-    console.log("Gemini API Success Response:", result);
-    
     if (result.candidates && result.candidates[0].content && result.candidates[0].content.parts[0]) {
         return JSON.parse(result.candidates[0].content.parts[0].text);
     } else { 
@@ -418,47 +413,67 @@ const WorkoutPlanDisplay = ({ plan }) => {
         </div>
     );
 };
+*/
 
 // --- Dashboard Component ---
 const Dashboard = ({ workouts, totalWorkoutsCount, currentWeight, setView, onDeleteWorkout, onEditWorkout }) => {
+    const [collapsedDays, setCollapsedDays] = useState({});
+
+    useEffect(() => {
+        // By default, leave the most recent day (index 0) open and collapse the rest.
+        const initialCollapsedState = {};
+        workouts.forEach((day, index) => {
+            if (index > 0) {
+                initialCollapsedState[day.date] = true;
+            }
+        });
+        setCollapsedDays(initialCollapsedState);
+    }, [workouts]);
+
+    const toggleCollapse = (date) => {
+        setCollapsedDays(prevState => ({
+            ...prevState,
+            [date]: !prevState[date]
+        }));
+    };
+
     return (
         <div className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="bg-gray-800 p-6 rounded-lg shadow-md flex justify-between items-center">
-                    <div>
-                        <p className="text-gray-400 text-sm">Current Weight</p>
-                        <p className="text-3xl font-bold">{currentWeight ? `${currentWeight} lbs` : 'N/A'}</p>
-                    </div>
+                    <div><p className="text-gray-400 text-sm">Current Weight</p><p className="text-3xl font-bold">{currentWeight ? `${currentWeight} lbs` : 'N/A'}</p></div>
                     <Weight className="w-10 h-10 text-cyan-400" />
                 </div>
                 <div className="bg-gray-800 p-6 rounded-lg shadow-md flex justify-between items-center">
-                    <div>
-                        <p className="text-gray-400 text-sm">Total Workouts</p>
-                        <p className="text-3xl font-bold">{totalWorkoutsCount}</p>
-                    </div>
+                    <div><p className="text-gray-400 text-sm">Total Workouts</p><p className="text-3xl font-bold">{totalWorkoutsCount}</p></div>
                     <Dumbbell className="w-10 h-10 text-cyan-400" />
                 </div>
             </div>
             <div className="flex flex-col sm:flex-row space-y-4 sm:space-y-0 sm:space-x-4">
-                <button onClick={() => setView('addWorkout')} className="flex-1 bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center transition-transform transform hover:scale-105">
-                    <Plus className="mr-2" /> Add Workout
-                </button>
-                <button onClick={() => setView('logWeight')} className="flex-1 bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center transition-transform transform hover:scale-105">
-                    <Weight className="mr-2" /> Log Weight
-                </button>
+                <button onClick={() => setView('addWorkout')} className="flex-1 bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center transition-transform transform hover:scale-105"><Plus className="mr-2" /> Add Workout</button>
+                <button onClick={() => setView('logWeight')} className="flex-1 bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center transition-transform transform hover:scale-105"><Weight className="mr-2" /> Log Weight</button>
             </div>
+            {/* --- COMMENTED OUT: Generate Plan Button ---
             <div className="bg-gray-800 p-6 rounded-lg shadow-md text-center">
                 <h3 className="text-lg font-semibold mb-2 text-cyan-400">Need a Plan?</h3>
                 <p className="text-gray-300 mb-4">Let our AI generate a personalized workout plan for you.</p>
-                <button onClick={() => setView('generatePlan')} className="bg-gradient-to-r from-purple-500 to-cyan-500 hover:from-purple-600 hover:to-cyan-600 text-white font-bold py-3 px-6 rounded-lg flex items-center justify-center transition-transform transform hover:scale-105 w-full md:w-auto mx-auto">
-                    <BrainCircuit className="mr-2" /> ✨ Generate Workout Plan
-                </button>
+                <button onClick={() => setView('generatePlan')} className="bg-gradient-to-r from-purple-500 to-cyan-500 hover:from-purple-600 hover:to-cyan-600 text-white font-bold py-3 px-6 rounded-lg flex items-center justify-center transition-transform transform hover:scale-105 w-full md:w-auto mx-auto"><BrainCircuit className="mr-2" /> ✨ Generate Workout Plan</button>
             </div>
+            */}
             <div>
                 <h2 className="text-xl font-bold mb-4 text-cyan-400">Workout History</h2>
                 <div className="space-y-4">
                     {workouts.length > 0 ? (
-                        workouts.map(day => <WorkoutCard key={day.date} day={day} onDelete={onDeleteWorkout} onEdit={onEditWorkout} />)
+                        workouts.map(day => (
+                            <DailyWorkoutGroup 
+                                key={day.date} 
+                                day={day} 
+                                isCollapsed={collapsedDays[day.date]}
+                                onToggle={() => toggleCollapse(day.date)}
+                                onDelete={onDeleteWorkout} 
+                                onEdit={onEditWorkout} 
+                            />
+                        ))
                     ) : (
                         <p className="text-gray-400 text-center py-8">No workouts logged yet. Add one to get started!</p>
                     )}
@@ -468,55 +483,60 @@ const Dashboard = ({ workouts, totalWorkoutsCount, currentWeight, setView, onDel
     );
 };
 
-// --- Daily Workout Card Component ---
-const WorkoutCard = ({ day, onDelete, onEdit }) => {
+// --- Daily Workout Group Component ---
+const DailyWorkoutGroup = ({ day, isCollapsed, onToggle, onDelete, onEdit }) => {
     const formatDate = (dateString) => new Date(dateString + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
     return (
-        <div className="bg-gray-800 p-5 rounded-lg shadow-md hover:shadow-cyan-500/20 transition-shadow">
-            <h3 className="font-bold text-lg text-cyan-400 mb-4">{formatDate(day.date)}</h3>
-            <div className="space-y-4">
-                {day.activities.map((activity) => (
-                    <div key={activity.id} className="bg-gray-700/50 p-3 rounded-lg">
-                        <div className="flex justify-between items-start">
-                            {activity.currentWeight && (
-                                <div className="flex items-center text-gray-300 text-sm mb-2 font-semibold">
-                                    <Weight size={14} className="mr-2"/>
-                                    <span>Body Weight: {activity.currentWeight} lbs</span>
+        <div className="bg-gray-800 rounded-lg shadow-md hover:shadow-cyan-500/20 transition-shadow">
+            <button onClick={onToggle} className="w-full flex justify-between items-center p-5 text-left">
+                <h3 className="font-bold text-lg text-cyan-400">{formatDate(day.date)}</h3>
+                {isCollapsed ? <ChevronRight size={24} /> : <ChevronDown size={24} />}
+            </button>
+            {!isCollapsed && (
+                <div className="px-5 pb-5 space-y-4">
+                    {day.activities.map((activity) => (
+                        <div key={activity.id} className="bg-gray-700/50 p-3 rounded-lg">
+                            <div className="flex justify-between items-start">
+                                {activity.currentWeight && (
+                                    <div className="flex items-center text-gray-300 text-sm mb-2 font-semibold">
+                                        <Weight size={14} className="mr-2"/>
+                                        <span>Body Weight: {activity.currentWeight} lbs</span>
+                                    </div>
+                                )}
+                                <div className="flex items-center space-x-2 ml-auto">
+                                    <button onClick={() => onEdit(activity)} className="text-gray-400 hover:text-cyan-400 p-1"><Edit size={18} /></button>
+                                    <button onClick={() => onDelete(activity.id)} className="text-gray-400 hover:text-red-400 p-1"><Trash2 size={18} /></button>
+                                </div>
+                            </div>
+
+                            {activity.cardio && activity.cardio.length > 0 && (
+                                <div>
+                                    <h4 className="font-semibold flex items-center text-yellow-400"><Zap size={16} className="mr-2"/>Cardio</h4>
+                                    <ul className="list-disc list-inside mt-2 text-gray-300 space-y-1 ml-4">
+                                        {activity.cardio.map((c, i) => <li key={i}>{c.type}: {c.duration} mins, {c.distance} km</li>)}
+                                    </ul>
                                 </div>
                             )}
-                            <div className="flex items-center space-x-2 ml-auto">
-                                <button onClick={() => onEdit(activity)} className="text-gray-400 hover:text-cyan-400 p-1"><Edit size={18} /></button>
-                                <button onClick={() => onDelete(activity.id)} className="text-gray-400 hover:text-red-400 p-1"><Trash2 size={18} /></button>
-                            </div>
-                        </div>
-
-                        {activity.cardio && activity.cardio.length > 0 && (
-                            <div>
-                                <h4 className="font-semibold flex items-center text-yellow-400"><Zap size={16} className="mr-2"/>Cardio</h4>
-                                <ul className="list-disc list-inside mt-2 text-gray-300 space-y-1 ml-4">
-                                    {activity.cardio.map((c, i) => <li key={i}>{c.type}: {c.duration} mins, {c.distance} km</li>)}
-                                </ul>
-                            </div>
-                        )}
-                        {activity.weights && activity.weights.length > 0 && (
-                             <div className="mt-2">
-                                <h4 className="font-semibold flex items-center text-cyan-400"><Dumbbell size={16} className="mr-2"/>Weightlifting</h4>
-                                <div className="mt-2 space-y-3">
-                                    {activity.weights.map((exercise, i) => (
-                                        <div key={i}>
-                                            <p className="font-semibold text-gray-200">{exercise.name}</p>
-                                            <ul className="text-sm text-gray-400 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-4 gap-y-1 mt-1 ml-4">
-                                                {exercise.sets.map((set, j) => <li key={j} className="flex items-center"><ChevronRight size={12} className="mr-1" />{set.reps} reps @ {set.weight} lbs</li>)}
-                                            </ul>
-                                        </div>
-                                    ))}
+                            {activity.weights && activity.weights.length > 0 && (
+                                 <div className="mt-2">
+                                    <h4 className="font-semibold flex items-center text-cyan-400"><Dumbbell size={16} className="mr-2"/>Weightlifting</h4>
+                                    <div className="mt-2 space-y-3">
+                                        {activity.weights.map((exercise, i) => (
+                                            <div key={i}>
+                                                <p className="font-semibold text-gray-200">{exercise.name}</p>
+                                                <ul className="text-sm text-gray-400 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-4 gap-y-1 mt-1 ml-4">
+                                                    {exercise.sets.map((set, j) => <li key={j} className="flex items-center"><ChevronRight size={12} className="mr-1" />{set.reps} reps @ {set.weight} lbs</li>)}
+                                                </ul>
+                                            </div>
+                                        ))}
+                                    </div>
                                 </div>
-                            </div>
-                        )}
-                    </div>
-                ))}
-            </div>
+                            )}
+                        </div>
+                    ))}
+                </div>
+            )}
         </div>
     );
 };
@@ -629,4 +649,3 @@ const LogWeightForm = ({ onLogWeight, onCancel }) => {
         </form>
     );
 };
-
