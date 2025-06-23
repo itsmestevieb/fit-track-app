@@ -282,159 +282,19 @@ const LoginScreen = ({ onSignIn }) => {
     );
 };
 
-/* --- COMMENTED OUT: Generate Plan Feature ---
-
-// --- Gemini API Call Helper ---
-const callGeminiAPI = async (prompt) => {
-    const apiKey = ""; // Leave blank, handled by environment
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
-    const payload = {
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: {
-            responseMimeType: "application/json",
-            responseSchema: {
-                type: "OBJECT",
-                properties: {
-                    weeklyPlan: {
-                        type: "ARRAY",
-                        description: "A 5-day workout plan.",
-                        items: {
-                            type: "OBJECT",
-                            properties: {
-                                day: { type: "STRING" },
-                                focus: { type: "STRING" },
-                                exercises: {
-                                    type: "ARRAY",
-                                    items: {
-                                        type: "OBJECT",
-                                        properties: {
-                                            name: { type: "STRING" },
-                                            sets: { type: "STRING" },
-                                            reps: { type: "STRING" }
-                                        },
-                                        required: ["name", "sets", "reps"]
-                                    }
-                                }
-                            },
-                            required: ["day", "focus", "exercises"]
-                        }
-                    }
-                },
-                required: ["weeklyPlan"]
-            }
-        }
-    };
-    const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-    if (!response.ok) {
-        const errorText = await response.text();
-        console.error("Gemini API Error Response:", errorText);
-        throw new Error(`API call failed with status: ${response.status}. Response: ${errorText}`);
-    }
-    const result = await response.json();
-    if (result.candidates && result.candidates[0].content && result.candidates[0].content.parts[0]) {
-        return JSON.parse(result.candidates[0].content.parts[0].text);
-    } else { 
-        console.error("Invalid response structure from API:", result);
-        throw new Error("Invalid response structure from API."); 
-    }
-};
-
-// --- Generate Plan & Modal Components ---
-const GeneratePlanView = ({ onCancel }) => {
-    const [goal, setGoal] = useState('');
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState(null);
-    const [plan, setPlan] = useState(null);
-    const handleGenerate = async (e) => {
-        e.preventDefault();
-        if (!goal.trim()) return;
-        setLoading(true);
-        setError(null);
-        setPlan(null);
-        const prompt = `You are an expert personal trainer. Create a well-balanced, 5-day weekly workout plan for a user whose goal is to "${goal}". For each day, provide a focus (e.g., "Chest & Triceps") and a list of 4-5 exercises. For each exercise, specify the number of sets and reps. Provide the response as a valid JSON object adhering to the provided schema.`;
-        try {
-            const result = await callGeminiAPI(prompt);
-            setPlan(result.weeklyPlan);
-        } catch (err) {
-            console.error("Full error object from callGeminiAPI:", err);
-            setError(`Failed to generate a plan. The AI model may be temporarily unavailable or there was a network issue. Please try again. Details: ${err.message}`);
-        } finally {
-            setLoading(false);
-        }
-    };
-    return (
-        <div className="bg-gray-800 p-6 rounded-lg shadow-lg space-y-6">
-            <h2 className="text-2xl font-bold text-cyan-400 flex items-center"><BrainCircuit className="mr-3" /> AI Workout Plan Generator</h2>
-            <p className="text-gray-300">Tell us your fitness goal, and our AI will generate a personalized 5-day workout plan for you.</p>
-            <form onSubmit={handleGenerate} className="space-y-4">
-                <div>
-                    <label htmlFor="goal" className="block text-sm font-medium text-gray-300 mb-1">What is your primary fitness goal?</label>
-                    <input id="goal" type="text" value={goal} onChange={(e) => setGoal(e.target.value)} placeholder="e.g., build muscle, lose weight, improve endurance" className="w-full bg-gray-700 border-gray-600 rounded-lg p-3 focus:ring-cyan-500 focus:border-cyan-500" required />
-                </div>
-                <div className="flex items-center justify-end space-x-4">
-                    <button type="button" onClick={onCancel} className="bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-lg">Back to Dashboard</button>
-                    <button type="submit" disabled={loading} className="bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-2 px-4 rounded-lg disabled:bg-gray-500 disabled:cursor-not-allowed flex items-center">{loading ? <Dumbbell className="w-5 h-5 animate-spin mr-2" /> : '✨ Generate Plan'}</button>
-                </div>
-            </form>
-            {error && (<Modal title="Error Generating Plan" onClose={() => setError(null)}><p className="text-red-400 whitespace-pre-wrap">{error}</p></Modal>)}
-            {plan && (<Modal title={`Your Plan for "${goal}"`} onClose={() => setPlan(null)}><WorkoutPlanDisplay plan={plan} /></Modal>)}
-        </div>
-    );
-};
-const Modal = ({ title, children, onClose }) => {
-    return (
-        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
-            <div className="bg-gray-800 rounded-lg shadow-xl w-full max-w-2xl max-h-full overflow-y-auto">
-                <div className="flex justify-between items-center p-4 border-b border-gray-700 sticky top-0 bg-gray-800">
-                    <h3 className="text-xl font-bold text-cyan-400">{title}</h3>
-                    <button onClick={onClose} className="text-gray-400 hover:text-white"><X size={24} /></button>
-                </div>
-                <div className="p-6">{children}</div>
-            </div>
-        </div>
-    );
-};
-const WorkoutPlanDisplay = ({ plan }) => {
-    return (
-        <div className="space-y-6">
-            {plan.map((dayPlan, index) => (
-                <div key={index} className="bg-gray-700/50 p-4 rounded-lg">
-                    <h4 className="text-lg font-bold text-cyan-400">{dayPlan.day}: <span className="text-yellow-400">{dayPlan.focus}</span></h4>
-                    <ul className="mt-2 space-y-2">
-                        {dayPlan.exercises.map((exercise, i) => (
-                            <li key={i} className="flex justify-between items-center bg-gray-700 p-2 rounded">
-                                <span className="font-semibold text-gray-200">{exercise.name}</span>
-                                <span className="text-gray-300">{exercise.sets} sets x {exercise.reps} reps</span>
-                            </li>
-                        ))}
-                    </ul>
-                </div>
-            ))}
-        </div>
-    );
-};
-*/
-
 // --- Dashboard Component ---
 const Dashboard = ({ workouts, totalWorkoutsCount, currentWeight, setView, onDeleteWorkout, onEditWorkout }) => {
-    const [collapsedDays, setCollapsedDays] = useState({});
+    const [openDays, setOpenDays] = useState({});
 
     useEffect(() => {
-        // By default, leave the most recent day (index 0) open and collapse the rest.
-        const initialCollapsedState = {};
-        workouts.forEach((day, index) => {
-            if (index > 0) {
-                initialCollapsedState[day.date] = true;
-            }
-        });
-        setCollapsedDays(initialCollapsedState);
+        // By default, leave the most recent day (index 0) open.
+        if (workouts.length > 0) {
+            setOpenDays({ [workouts[0].date]: true });
+        }
     }, [workouts]);
 
-    const toggleCollapse = (date) => {
-        setCollapsedDays(prevState => ({
-            ...prevState,
-            [date]: !prevState[date]
-        }));
+    const toggleDay = (date) => {
+        setOpenDays(prev => ({ ...prev, [date]: !prev[date] }));
     };
 
     return (
@@ -445,7 +305,7 @@ const Dashboard = ({ workouts, totalWorkoutsCount, currentWeight, setView, onDel
                     <Weight className="w-10 h-10 text-cyan-400" />
                 </div>
                 <div className="bg-gray-800 p-6 rounded-lg shadow-md flex justify-between items-center">
-                    <div><p className="text-gray-400 text-sm">Total Workouts</p><p className="text-3xl font-bold">{totalWorkoutsCount}</p></div>
+                    <div><p className="text-gray-400 text-sm">Total Logged Workouts</p><p className="text-3xl font-bold">{totalWorkoutsCount}</p></div>
                     <Dumbbell className="w-10 h-10 text-cyan-400" />
                 </div>
             </div>
@@ -453,23 +313,16 @@ const Dashboard = ({ workouts, totalWorkoutsCount, currentWeight, setView, onDel
                 <button onClick={() => setView('addWorkout')} className="flex-1 bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center transition-transform transform hover:scale-105"><Plus className="mr-2" /> Add Workout</button>
                 <button onClick={() => setView('logWeight')} className="flex-1 bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center transition-transform transform hover:scale-105"><Weight className="mr-2" /> Log Weight</button>
             </div>
-            {/* --- COMMENTED OUT: Generate Plan Button ---
-            <div className="bg-gray-800 p-6 rounded-lg shadow-md text-center">
-                <h3 className="text-lg font-semibold mb-2 text-cyan-400">Need a Plan?</h3>
-                <p className="text-gray-300 mb-4">Let our AI generate a personalized workout plan for you.</p>
-                <button onClick={() => setView('generatePlan')} className="bg-gradient-to-r from-purple-500 to-cyan-500 hover:from-purple-600 hover:to-cyan-600 text-white font-bold py-3 px-6 rounded-lg flex items-center justify-center transition-transform transform hover:scale-105 w-full md:w-auto mx-auto"><BrainCircuit className="mr-2" /> ✨ Generate Workout Plan</button>
-            </div>
-            */}
             <div>
                 <h2 className="text-xl font-bold mb-4 text-cyan-400">Workout History</h2>
                 <div className="space-y-4">
                     {workouts.length > 0 ? (
                         workouts.map(day => (
-                            <DailyWorkoutGroup 
+                            <DailyWorkoutCard 
                                 key={day.date} 
                                 day={day} 
-                                isCollapsed={collapsedDays[day.date]}
-                                onToggle={() => toggleCollapse(day.date)}
+                                isOpen={!!openDays[day.date]}
+                                onToggle={() => toggleDay(day.date)}
                                 onDelete={onDeleteWorkout} 
                                 onEdit={onEditWorkout} 
                             />
@@ -483,45 +336,53 @@ const Dashboard = ({ workouts, totalWorkoutsCount, currentWeight, setView, onDel
     );
 };
 
-// --- Daily Workout Group Component ---
-const DailyWorkoutGroup = ({ day, isCollapsed, onToggle, onDelete, onEdit }) => {
+// --- Daily Workout Card Component ---
+const DailyWorkoutCard = ({ day, isOpen, onToggle, onDelete, onEdit }) => {
     const formatDate = (dateString) => new Date(dateString + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+
+    // Consolidate all exercises for the day
+    const allCardioEntries = useMemo(() => day.activities.filter(a => a.cardio && a.cardio.length > 0), [day.activities]);
+    const allWeightEntries = useMemo(() => day.activities.filter(a => a.weights && a.weights.length > 0), [day.activities]);
+    const bodyWeightEntry = useMemo(() => day.activities.find(a => a.currentWeight), [day.activities]);
 
     return (
         <div className="bg-gray-800 rounded-lg shadow-md hover:shadow-cyan-500/20 transition-shadow">
             <button onClick={onToggle} className="w-full flex justify-between items-center p-5 text-left">
                 <h3 className="font-bold text-lg text-cyan-400">{formatDate(day.date)}</h3>
-                {isCollapsed ? <ChevronRight size={24} /> : <ChevronDown size={24} />}
+                {isOpen ? <ChevronDown size={24} /> : <ChevronRight size={24} />}
             </button>
-            {!isCollapsed && (
-                <div className="px-5 pb-5 space-y-4">
-                    {day.activities.map((activity) => (
-                        <div key={activity.id} className="bg-gray-700/50 p-3 rounded-lg">
-                            <div className="flex justify-between items-start">
-                                {activity.currentWeight && (
-                                    <div className="flex items-center text-gray-300 text-sm mb-2 font-semibold">
-                                        <Weight size={14} className="mr-2"/>
-                                        <span>Body Weight: {activity.currentWeight} lbs</span>
-                                    </div>
-                                )}
-                                <div className="flex items-center space-x-2 ml-auto">
-                                    <button onClick={() => onEdit(activity)} className="text-gray-400 hover:text-cyan-400 p-1"><Edit size={18} /></button>
-                                    <button onClick={() => onDelete(activity.id)} className="text-gray-400 hover:text-red-400 p-1"><Trash2 size={18} /></button>
-                                </div>
-                            </div>
-
-                            {activity.cardio && activity.cardio.length > 0 && (
-                                <div>
-                                    <h4 className="font-semibold flex items-center text-yellow-400"><Zap size={16} className="mr-2"/>Cardio</h4>
-                                    <ul className="list-disc list-inside mt-2 text-gray-300 space-y-1 ml-4">
+            {isOpen && (
+                <div className="px-5 pb-5 space-y-4 border-t border-gray-700 pt-4">
+                    {bodyWeightEntry && (
+                         <div className="flex items-center text-gray-300 text-sm mb-2 font-semibold">
+                            <Weight size={14} className="mr-2"/>
+                            <span>Body Weight: {bodyWeightEntry.currentWeight} lbs</span>
+                        </div>
+                    )}
+                    
+                    {allCardioEntries.length > 0 && (
+                        <div>
+                            <h4 className="font-semibold flex items-center text-yellow-400 mb-2"><Zap size={16} className="mr-2"/>Cardio</h4>
+                            {allCardioEntries.map(activity => (
+                                <div key={activity.id} className="ml-6 pl-4 border-l-2 border-gray-700 pb-2">
+                                     <ul className="list-disc list-inside text-gray-300 space-y-1">
                                         {activity.cardio.map((c, i) => <li key={i}>{c.type}: {c.duration} mins, {c.distance} km</li>)}
                                     </ul>
+                                     <div className="flex items-center space-x-2 mt-2">
+                                        <button onClick={() => onEdit(activity)} className="text-gray-400 hover:text-cyan-400 p-1 text-xs flex items-center"><Edit size={14} className="mr-1"/> Edit Entry</button>
+                                        <button onClick={() => onDelete(activity.id)} className="text-gray-400 hover:text-red-400 p-1 text-xs flex items-center"><Trash2 size={14} className="mr-1"/> Delete Entry</button>
+                                    </div>
                                 </div>
-                            )}
-                            {activity.weights && activity.weights.length > 0 && (
-                                 <div className="mt-2">
-                                    <h4 className="font-semibold flex items-center text-cyan-400"><Dumbbell size={16} className="mr-2"/>Weightlifting</h4>
-                                    <div className="mt-2 space-y-3">
+                            ))}
+                        </div>
+                    )}
+                    
+                    {allWeightEntries.length > 0 && (
+                        <div>
+                            <h4 className="font-semibold flex items-center text-cyan-400 mb-2"><Dumbbell size={16} className="mr-2"/>Weightlifting</h4>
+                             {allWeightEntries.map(activity => (
+                                <div key={activity.id} className="ml-6 pl-4 border-l-2 border-gray-700 pb-2">
+                                     <div className="space-y-3">
                                         {activity.weights.map((exercise, i) => (
                                             <div key={i}>
                                                 <p className="font-semibold text-gray-200">{exercise.name}</p>
@@ -531,10 +392,14 @@ const DailyWorkoutGroup = ({ day, isCollapsed, onToggle, onDelete, onEdit }) => 
                                             </div>
                                         ))}
                                     </div>
+                                     <div className="flex items-center space-x-2 mt-2">
+                                        <button onClick={() => onEdit(activity)} className="text-gray-400 hover:text-cyan-400 p-1 text-xs flex items-center"><Edit size={14} className="mr-1"/> Edit Entry</button>
+                                        <button onClick={() => onDelete(activity.id)} className="text-gray-400 hover:text-red-400 p-1 text-xs flex items-center"><Trash2 size={14} className="mr-1"/> Delete Entry</button>
+                                    </div>
                                 </div>
-                            )}
+                            ))}
                         </div>
-                    ))}
+                    )}
                 </div>
             )}
         </div>
@@ -564,7 +429,20 @@ const WorkoutForm = ({ onSave, onCancel, existingWorkout = null }) => {
     const addWeightExercise = () => setWeights([...weights, { name: '', sets: [{ reps: '', weight: '' }] }]);
     const removeWeightExercise = (exIndex) => setWeights(weights.filter((_, i) => i !== exIndex));
     const handleExerciseNameChange = (exIndex, value) => { const updated = [...weights]; updated[exIndex].name = value; setWeights(updated); };
-    const addSet = (exIndex) => { const updated = [...weights]; updated[exIndex].sets.push({ reps: '', weight: '' }); setWeights(updated); };
+    
+    const addSet = (exIndex) => {
+        const updatedWeights = [...weights];
+        const currentSets = updatedWeights[exIndex].sets;
+        const lastSet = currentSets.length > 0 ? currentSets[currentSets.length - 1] : { reps: '', weight: '' };
+        
+        updatedWeights[exIndex].sets.push({ 
+            reps: lastSet.reps, 
+            weight: lastSet.weight 
+        });
+        
+        setWeights(updatedWeights);
+    };
+
     const removeSet = (exIndex, setIndex) => { const updated = [...weights]; updated[exIndex].sets = updated[exIndex].sets.filter((_, i) => i !== setIndex); setWeights(updated); };
     const handleSetChange = (exIndex, setIndex, field, value) => { const updated = [...weights]; updated[exIndex].sets[setIndex][field] = value; setWeights(updated); };
 
