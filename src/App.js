@@ -2,8 +2,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, onAuthStateChanged, signInWithCustomToken, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
-import { getFirestore, collection, addDoc, query, onSnapshot, doc, deleteDoc, updateDoc } from 'firebase/firestore';
-import { Trash2, Plus, Dumbbell, Zap, Weight, LogOut, BrainCircuit, X, Edit, ChevronRight, ChevronDown, BookCopy, FilePlus, Sparkles } from 'lucide-react';
+import { getFirestore, collection, addDoc, query, onSnapshot, doc, deleteDoc, updateDoc, writeBatch, getDocs, serverTimestamp, setDoc } from 'firebase/firestore';
+import { Trash2, Plus, Dumbbell, Zap, Weight, LogOut, BrainCircuit, X, Edit, ChevronRight, ChevronDown, BookCopy, FilePlus, ShieldCheck, Eye, Users } from 'lucide-react';
+
+// --- App Versioning ---
+const APP_VERSION = "2.0.0";
+const LATEST_COMMIT_MESSAGE = "feat: Add comprehensive admin panel for user and access management.";
 
 // --- Main App Component ---
 export default function App() {
@@ -14,6 +18,7 @@ export default function App() {
     const [appId, setAppId] = useState(null);
     const [isAuthReady, setIsAuthReady] = useState(false);
     const [configError, setConfigError] = useState(false);
+    const [isAdmin, setIsAdmin] = useState(false);
     
     const [workouts, setWorkouts] = useState([]);
     const [workoutPlans, setWorkoutPlans] = useState([]);
@@ -84,6 +89,30 @@ export default function App() {
         }
     }, []);
 
+    // --- User Info and Access Logging ---
+    useEffect(() => {
+        if (user && db && appId) {
+            const logAccess = async () => {
+                const userInfoRef = doc(db, `/artifacts/${appId}/user_info`, user.uid);
+                await setDoc(userInfoRef, {
+                    displayName: user.displayName,
+                    email: user.email,
+                    lastLogin: serverTimestamp(),
+                }, { merge: true });
+
+                const accessLogRef = collection(db, `/artifacts/${appId}/access_logs`);
+                await addDoc(accessLogRef, {
+                    uid: user.uid,
+                    displayName: user.displayName,
+                    email: user.email,
+                    timestamp: serverTimestamp(),
+                });
+            };
+            logAccess();
+        }
+    }, [user, db, appId]);
+
+
     // --- Data Fetching for Authenticated User ---
     useEffect(() => {
         if (!isAuthReady || !db || !user || !appId) {
@@ -141,7 +170,7 @@ export default function App() {
 
     // --- Auth Functions ---
     const signInWithGoogle = async () => { if (auth) await signInWithPopup(auth, new GoogleAuthProvider()).catch(e => console.error(e)); };
-    const handleSignOut = async () => { if (auth) await signOut(auth).catch(e => console.error(e)); };
+    const handleSignOut = async () => { if (auth) await signOut(auth).then(() => setIsAdmin(false)).catch(e => console.error(e)); };
 
     // --- Data Handlers ---
     const getCollectionPath = (subPath) => `/artifacts/${appId}/users/${user.uid}/${subPath}`;
@@ -162,6 +191,10 @@ export default function App() {
     // --- Render Logic ---
     if (configError) return <div className="flex flex-col items-center justify-center h-screen bg-gray-900 text-white text-center p-4"><X className="w-16 h-16 text-red-500 mb-4" /><h2 className="text-2xl font-bold mb-2">Configuration Error</h2><p className="max-w-md">Failed to initialize Firebase. Please check your hosting setup and environment variables.</p></div>;
     if (!isAuthReady) return <div className="flex items-center justify-center h-screen bg-gray-900 text-white"><Dumbbell className="w-16 h-16 animate-spin mx-auto text-cyan-400" /><p className="mt-4 text-lg">Connecting...</p></div>;
+    
+    if (view === 'adminLogin') return <AdminLogin onLoginSuccess={() => { setIsAdmin(true); setView('adminDashboard'); }} onCancel={() => setView('dashboard')} />;
+    if (isAdmin && view === 'adminDashboard') return <AdminDashboard db={db} appId={appId} setView={setView}/>;
+    
     if (!user) return <LoginScreen onSignIn={signInWithGoogle} />;
     
     const renderView = () => {
@@ -183,7 +216,10 @@ export default function App() {
         <div className="min-h-screen bg-gray-900 text-gray-100 font-sans">
             <header className="bg-gray-800 shadow-lg p-4 sticky top-0 z-10"><div className="container mx-auto max-w-4xl flex justify-between items-center"><h1 className="text-2xl font-bold text-cyan-400 flex items-center"><Dumbbell className="mr-3" />FitTrack</h1><div className="flex items-center space-x-4"><img src={user.photoURL || `https://placehold.co/40x40/475569/E0E7FF?text=${user.displayName ? user.displayName.charAt(0) : 'U'}`} alt="User profile" className="w-10 h-10 rounded-full border-2 border-cyan-400" /><span className="font-semibold text-white hidden sm:block">Hi, {user.displayName || 'User'}!</span><button onClick={handleSignOut} className="flex items-center text-gray-300 hover:text-cyan-400 transition-colors" title="Sign Out"><LogOut size={20}/></button></div></div></header>
             <main className="container mx-auto max-w-4xl p-4 md:p-6">{renderView()}</main>
-            <footer className="text-center p-4 text-gray-500 text-xs"><p>Built with React & Firebase.</p></footer>
+            <footer className="text-center p-4 text-gray-500 text-xs">
+                <p>Built with React & Firebase.</p>
+                <button onClick={() => setView('adminLogin')} className="opacity-10 absolute bottom-0 right-0 p-2">.</button>
+            </footer>
         </div>
     );
 }
@@ -196,6 +232,81 @@ const LoginScreen = ({ onSignIn }) => (
     </div>
 );
 
+const AdminLogin = ({ onLoginSuccess, onCancel }) => {
+    const [username, setUsername] = useState('');
+    const [password, setPassword] = useState('');
+    const [error, setError] = useState('');
+
+    const handleLogin = (e) => {
+        e.preventDefault();
+        if (username === 'TOBY' && password === 'Go1More!!!') {
+            onLoginSuccess();
+        } else {
+            setError('Invalid credentials.');
+        }
+    };
+
+    return (
+        <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
+            <div className="w-full max-w-md">
+                <form onSubmit={handleLogin} className="bg-gray-800 rounded-lg shadow-xl p-8 space-y-6">
+                    <h2 className="text-2xl font-bold text-center text-cyan-400">Admin Login</h2>
+                    {error && <p className="text-red-500 text-center">{error}</p>}
+                    <div><label className="block text-sm font-medium text-gray-300">Username</label><input type="text" value={username} onChange={(e) => setUsername(e.target.value)} className="w-full mt-1 bg-gray-700 border-gray-600 rounded-lg p-2" required /></div>
+                    <div><label className="block text-sm font-medium text-gray-300">Password</label><input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full mt-1 bg-gray-700 border-gray-600 rounded-lg p-2" required /></div>
+                    <div className="flex items-center justify-between"><button type="button" onClick={onCancel} className="text-cyan-400 hover:text-cyan-300">← Back to App</button><button type="submit" className="bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-2 px-4 rounded-lg">Login</button></div>
+                </form>
+            </div>
+        </div>
+    );
+};
+
+const AdminDashboard = ({ db, appId, setView }) => {
+    const [allUsers, setAllUsers] = useState([]);
+    const [accessLogs, setAccessLogs] = useState([]);
+
+    useEffect(() => {
+        if (db && appId) {
+            const unsubUsers = onSnapshot(query(collection(db, `/artifacts/${appId}/user_info`)), snap => {
+                setAllUsers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+            });
+            const qLogs = query(collection(db, `/artifacts/${appId}/access_logs`), orderBy('timestamp', 'desc'));
+            const unsubLogs = onSnapshot(qLogs, snap => {
+                setAccessLogs(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+            });
+            return () => { unsubUsers(); unsubLogs(); };
+        }
+    }, [db, appId]);
+    
+    const handleDeleteUser = async (userIdToDelete) => {
+        const warningMessage = `This is a demo feature. Deleting user sub-collections (like workouts) requires a Firebase Cloud Function for security. This action will only remove the user's entry from the main user list. Proceed?`;
+        if (!window.confirm(warningMessage)) return;
+        
+        console.warn(`DELETION ATTEMPTED FOR USER: ${userIdToDelete}`);
+        try {
+            await deleteDoc(doc(db, `/artifacts/${appId}/user_info`, userIdToDelete));
+            alert("User info document deleted.");
+        } catch (error) {
+            console.error("Error deleting user info:", error);
+            alert("Failed to delete user info. Check console and Firestore rules.");
+        }
+    };
+
+    const formatTimestamp = (ts) => ts ? new Date(ts.seconds * 1000).toLocaleString() : 'N/A';
+
+    return (
+        <div className="bg-gray-800 p-6 rounded-lg shadow-lg space-y-8">
+            <div className="flex justify-between items-center">
+                 <h2 className="text-3xl font-bold text-cyan-400 flex items-center"><ShieldCheck className="mr-3"/>Admin Panel</h2>
+                 <button onClick={() => setView('dashboard')} className="text-cyan-400 hover:text-cyan-300">← Back to App</button>
+            </div>
+            <div className="bg-gray-700/50 p-4 rounded-lg"><h3 className="text-xl font-semibold text-gray-200 mb-2">App Information</h3><p><span className="font-bold">Version:</span> {APP_VERSION}</p><p><span className="font-bold">Latest Commit:</span> {LATEST_COMMIT_MESSAGE}</p></div>
+            <div className="bg-gray-700/50 p-4 rounded-lg"><h3 className="text-xl font-semibold text-gray-200 mb-3 flex items-center"><Users className="mr-2"/>User Management ({allUsers.length})</h3><div className="max-h-60 overflow-y-auto space-y-2 pr-2">{allUsers.map(u => (<div key={u.id} className="bg-gray-700 p-3 rounded flex justify-between items-center"><div><p className="font-bold">{u.displayName}</p><p className="text-sm text-gray-400">{u.email}</p><p className="text-xs text-gray-500">Last Login: {formatTimestamp(u.lastLogin)}</p></div><button onClick={() => handleDeleteUser(u.id)} className="text-red-500 hover:text-red-400 p-2"><Trash2/></button></div>))}</div></div>
+            <div className="bg-gray-700/50 p-4 rounded-lg"><h3 className="text-xl font-semibold text-gray-200 mb-3 flex items-center"><Eye className="mr-2"/>Access Logs</h3><div className="max-h-60 overflow-y-auto space-y-2 pr-2">{accessLogs.map(log => (<div key={log.id} className="bg-gray-700 p-3 rounded"><p><span className="font-bold">{log.displayName}</span> ({log.email})</p><p className="text-sm text-gray-400">{formatTimestamp(log.timestamp)}</p></div>))}</div></div>
+        </div>
+    );
+};
+
 const Dashboard = ({ workouts, totalWorkoutsCount, currentWeight, setView, onDeleteWorkout, onEditWorkout }) => {
     const [openDays, setOpenDays] = useState({});
     useEffect(() => { if (workouts.length > 0) { setOpenDays({ [workouts[0].date]: true }); } }, [workouts]);
@@ -203,14 +314,8 @@ const Dashboard = ({ workouts, totalWorkoutsCount, currentWeight, setView, onDel
 
     return (
         <div className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="bg-gray-800 p-6 rounded-lg shadow-md flex justify-between items-center"><div><p className="text-gray-400 text-sm">Current Weight</p><p className="text-3xl font-bold">{currentWeight ? `${currentWeight} lbs` : 'N/A'}</p></div><Weight className="w-10 h-10 text-cyan-400" /></div>
-                <div className="bg-gray-800 p-6 rounded-lg shadow-md flex justify-between items-center"><div><p className="text-gray-400 text-sm">Total Logged Workouts</p><p className="text-3xl font-bold">{totalWorkoutsCount}</p></div><Dumbbell className="w-10 h-10 text-cyan-400" /></div>
-            </div>
-            <div className="flex flex-col sm:flex-row space-y-4 sm:space-y-0 sm:space-x-4">
-                <button onClick={() => setView('addWorkoutSelection')} className="flex-1 bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center transition-transform transform hover:scale-105"><Plus className="mr-2" /> Add Workout</button>
-                <button onClick={() => setView('managePlans')} className="flex-1 bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center transition-transform transform hover:scale-105"><BookCopy className="mr-2" /> Manage Plans</button>
-            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6"><div className="bg-gray-800 p-6 rounded-lg shadow-md flex justify-between items-center"><div><p className="text-gray-400 text-sm">Current Weight</p><p className="text-3xl font-bold">{currentWeight ? `${currentWeight} lbs` : 'N/A'}</p></div><Weight className="w-10 h-10 text-cyan-400" /></div><div className="bg-gray-800 p-6 rounded-lg shadow-md flex justify-between items-center"><div><p className="text-gray-400 text-sm">Total Logged Workouts</p><p className="text-3xl font-bold">{totalWorkoutsCount}</p></div><Dumbbell className="w-10 h-10 text-cyan-400" /></div></div>
+            <div className="flex flex-col sm:flex-row space-y-4 sm:space-y-0 sm:space-x-4"><button onClick={() => setView('addWorkoutSelection')} className="flex-1 bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center transition-transform transform hover:scale-105"><Plus className="mr-2" /> Add Workout</button><button onClick={() => setView('managePlans')} className="flex-1 bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center transition-transform transform hover:scale-105"><BookCopy className="mr-2" /> Manage Plans</button></div>
             <div><h2 className="text-xl font-bold mb-4 text-cyan-400">Workout History</h2><div className="space-y-4">{workouts.length > 0 ? (workouts.map(day => <DailyWorkoutCard key={day.date} day={day} isOpen={!!openDays[day.date]} onToggle={() => toggleDay(day.date)} onDelete={onDeleteWorkout} onEdit={onEditWorkout} />)) : (<p className="text-gray-400 text-center py-8">No workouts logged yet. Add one to get started!</p>)}</div></div>
         </div>
     );
@@ -244,12 +349,7 @@ const AddWorkoutSelection = ({ plans, setView, onSelectPlan }) => (
             <button onClick={() => setView('addWorkout')} className="w-full bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-4 px-4 rounded-lg flex items-center justify-center text-lg"><FilePlus className="mr-3"/>Log a New Manual Workout</button>
             <div>
                 <h3 className="text-xl font-semibold text-gray-300 my-4 text-center">Or Start from a Plan</h3>
-                {plans.length > 0 ? plans.map(plan => (
-                    <button key={plan.id} onClick={() => onSelectPlan(plan)} className="w-full bg-gray-700 hover:bg-gray-600 text-white font-semibold py-3 px-4 rounded-lg flex items-center justify-between mb-2">
-                        <span>{plan.name}</span>
-                        <ChevronRight/>
-                    </button>
-                )) : <p className="text-center text-gray-400">You have no saved plans. Go to "Manage Plans" to create one.</p>}
+                {plans.length > 0 ? plans.map(plan => (<button key={plan.id} onClick={() => onSelectPlan(plan)} className="w-full bg-gray-700 hover:bg-gray-600 text-white font-semibold py-3 px-4 rounded-lg flex items-center justify-between mb-2"><span>{plan.name}</span><ChevronRight/></button>)) : <p className="text-center text-gray-400">You have no saved plans. Go to "Manage Plans" to create one.</p>}
             </div>
         </div>
          <button onClick={() => setView('dashboard')} className="mt-6 text-cyan-400 hover:text-cyan-300">← Back to Dashboard</button>
@@ -258,21 +358,8 @@ const AddWorkoutSelection = ({ plans, setView, onSelectPlan }) => (
 
 const ManagePlansView = ({ plans, setView, onEdit, onDelete }) => (
     <div className="bg-gray-800 p-6 rounded-lg shadow-lg">
-        <div className="flex justify-between items-center mb-6">
-            <h2 className="text-2xl font-bold text-cyan-400">Your Workout Plans</h2>
-            <button onClick={() => setView('createPlan')} className="bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-2 px-4 rounded-lg flex items-center"><Plus className="mr-2"/>Create Plan</button>
-        </div>
-        <div className="space-y-3">
-            {plans.length > 0 ? plans.map(plan => (
-                <div key={plan.id} className="bg-gray-700 p-4 rounded-lg flex justify-between items-center">
-                    <span className="font-semibold text-lg">{plan.name}</span>
-                    <div className="flex space-x-2">
-                        <button onClick={() => onEdit(plan)} className="p-2 text-gray-300 hover:text-cyan-400"><Edit/></button>
-                        <button onClick={() => onDelete(plan.id)} className="p-2 text-gray-300 hover:text-red-400"><Trash2/></button>
-                    </div>
-                </div>
-            )) : <p className="text-center text-gray-400 py-8">You haven't created any workout plans yet.</p>}
-        </div>
+        <div className="flex justify-between items-center mb-6"><h2 className="text-2xl font-bold text-cyan-400">Your Workout Plans</h2><button onClick={() => setView('createPlan')} className="bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-2 px-4 rounded-lg flex items-center"><Plus className="mr-2"/>Create Plan</button></div>
+        <div className="space-y-3">{plans.length > 0 ? plans.map(plan => (<div key={plan.id} className="bg-gray-700 p-4 rounded-lg flex justify-between items-center"><span className="font-semibold text-lg">{plan.name}</span><div className="flex space-x-2"><button onClick={() => onEdit(plan)} className="p-2 text-gray-300 hover:text-cyan-400"><Edit/></button><button onClick={() => onDelete(plan.id)} className="p-2 text-gray-300 hover:text-red-400"><Trash2/></button></div></div>)) : <p className="text-center text-gray-400 py-8">You haven't created any workout plans yet.</p>}</div>
         <button onClick={() => setView('dashboard')} className="mt-6 text-cyan-400 hover:text-cyan-300">← Back to Dashboard</button>
     </div>
 );
@@ -282,13 +369,7 @@ const PlanEditorForm = ({ onSave, onCancel, existingPlan = null }) => {
     const [cardio, setCardio] = useState([]);
     const [weights, setWeights] = useState([]);
 
-    useEffect(() => {
-        if (existingPlan) {
-            setName(existingPlan.name || '');
-            setCardio(existingPlan.cardio || []);
-            setWeights(existingPlan.weights || []);
-        }
-    }, [existingPlan]);
+    useEffect(() => { if (existingPlan) { setName(existingPlan.name || ''); setCardio(existingPlan.cardio || []); setWeights(existingPlan.weights || []); } }, [existingPlan]);
 
     const addCardio = () => setCardio([...cardio, { type: '', duration: '', distance: '' }]);
     const removeCardio = (i) => setCardio(cardio.filter((_, idx) => idx !== i));
