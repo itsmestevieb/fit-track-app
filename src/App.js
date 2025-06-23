@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, onAuthStateChanged, signInWithCustomToken, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
-import { getFirestore, collection, addDoc, query, onSnapshot, doc, deleteDoc, updateDoc, writeBatch, getDocs, serverTimestamp, setDoc } from 'firebase/firestore';
+import { getFirestore, collection, addDoc, query, onSnapshot, doc, deleteDoc, updateDoc, getDocs, serverTimestamp, setDoc, orderBy } from 'firebase/firestore';
 import { Trash2, Plus, Dumbbell, Zap, Weight, LogOut, BrainCircuit, X, Edit, ChevronRight, ChevronDown, BookCopy, FilePlus, ShieldCheck, Eye, Users } from 'lucide-react';
 
 // --- App Versioning ---
